@@ -4,4 +4,4 @@ builtins = ["dbutils", "spark", "display", "sc"]
 
 [lint.per-file-ignores]
 # Notebook cells import after the widgets are read, which is deliberate.
-"m7demo/src/*.py" = ["E402"]
+"src/*.py" = ["E402"]

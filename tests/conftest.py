@@ -1,10 +1,57 @@
 """One local Spark session for the whole suite: starting it is the expensive
-part, so it is session-scoped."""
+part, so it is session-scoped.
+
+Levels 2, 3 and 4 need a JVM. On a machine without one they are SKIPPED with
+a single explanatory line rather than raising JAVA_GATEWAY_EXITED once per
+test — a participant should be told what to install, not shown eighteen
+tracebacks. CI sets M7_REQUIRE_SPARK=1, which turns the skip back into a
+failure: a runner silently skipping the Spark levels would be a gate that
+proves less than it appears to.
+"""
 
 import datetime as dt
+import os
+import shutil
+import subprocess
 
 import pytest
 from pyspark.sql import SparkSession
+
+
+def _java_version():
+    """The major version of the java on PATH, or None if there is none."""
+    java = shutil.which("java")
+    if not java:
+        return None
+    try:
+        out = subprocess.run([java, "-version"], capture_output=True, text=True,
+                             timeout=30).stderr
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for token in out.split():
+        if token.startswith('"'):
+            digits = token.strip('"').split(".")[0]
+            return int(digits) if digits.isdigit() else None
+    return None
+
+
+def pytest_collection_modifyitems(config, items):
+    version = _java_version()
+    if version is not None and version >= 17:
+        return
+    if os.environ.get("M7_REQUIRE_SPARK") == "1":
+        return                      # CI: let the failure be a failure
+    reason = (
+        "no Java 17+ on this machine, so the Spark levels cannot run "
+        "(sudo apt-get install -y openjdk-17-jre-headless). Level 1 still "
+        "runs, and CI runs the rest."
+        if version is None else
+        f"Java {version} is too old for pyspark 3.5.x; 17 or later is needed."
+    )
+    skip = pytest.mark.skip(reason=reason)
+    for item in items:
+        if "spark" in item.keywords:
+            item.add_marker(skip)
 
 
 @pytest.fixture(scope="session")

@@ -41,3 +41,15 @@ resources:
           notebook_task:
             notebook_path: ../src/audit_model.py
             base_parameters: *params
+
+        # Records rather than asserts: parameters, metrics and figures into
+        # one MLflow run, so a person can compare this deployment with the
+        # last one. It runs only after both audits pass, so nothing is
+        # recorded about a table the pipeline has already rejected.
+        - task_key: eda_report
+          depends_on:
+            - task_key: model_validation
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ../src/eda_report.py
+            base_parameters: *params
