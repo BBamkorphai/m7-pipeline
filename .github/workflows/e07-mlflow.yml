@@ -40,11 +40,25 @@ jobs:
             \"order_by\": [\"attributes.start_time DESC\"]
           }" -o json > run.json
 
-          jq -r '.runs[0].data.metrics[] | "\(.key) = \(.value)"' run.json
+          # The CLI unwraps a single-field list response, so -o json gives a
+          # bare ARRAY of runs here — not the {"runs": [...]} envelope the REST
+          # API documents. Accept either, rather than depending on which.
+          jq 'if type == "array" then . else .runs end' run.json > runs.json
+
+          if [ "$(jq 'length' runs.json)" -eq 0 ]; then
+            echo "::error::the experiment has no runs yet — run the job once"
+            exit 1
+          fi
+
+          # Flatten [{key,value},...] into {key: value} once, so every
+          # assertion below reads as a plain question about a number.
+          jq '.[0].data.metrics | map({(.key): (.value|tonumber)}) | add' \
+             runs.json > metrics.json
+          jq -r 'to_entries[] | "  \(.key) = \(.value)"' metrics.json
 
           # The pipeline is only meaningful if it scored somebody, and the
           # segmentation must not have collapsed onto one segment.
-          jq -e '.runs[0].data.metrics[] | select(.key=="rows") | .value > 0' run.json
-          jq -e '[.runs[0].data.metrics[]
-                  | select(.key|startswith("share_")) | .value]
-                 | map(select(. > 0)) | length >= 3' run.json
+          jq -e '.rows > 0' metrics.json > /dev/null
+          jq -e '[to_entries[] | select(.key | startswith("share_")) | .value]
+                 | map(select(. > 0)) | length >= 3' metrics.json > /dev/null
+          echo "the run MLflow recorded satisfies both assertions"
