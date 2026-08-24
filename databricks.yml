@@ -1,0 +1,67 @@
+# m7demo — the bundle the Module 7 pipeline deploys.
+#
+# One job, one task: the RFM notebook Module 6 ran raw with `jobs submit`.
+# Module 7 does not add bundle features; it changes WHO runs these commands.
+# Everything here was taught in Modules 4 and 5:
+#
+#   - existing_cluster_id pinned through the cluster_id variable, because the
+#     training workspace does not permit this credential to create clusters
+#     (Module 4, S17/S29 discussion).
+#   - two targets whose only differences are the target mode, the schema the
+#     notebook writes into, and prod's branch pin.
+#   - dev is mode: development, so the job is deployed as
+#     "[dev <short_name>] rfm_build" under the user's own bundle folder.
+#
+# Two targets, not three: dev is where every merge lands automatically, prod
+# is what a person approves. A staging stage would be a third copy of the
+# same two mechanisms and teaches nothing the pair does not.
+#
+# Validated with Databricks CLI v1.13.0 for both targets.
+
+bundle:
+  name: m7demo
+
+include:
+  - resources/*.yml
+
+variables:
+
+  catalog:
+    description: The catalog the notebook writes into
+    default: m7
+
+  schema:
+    description: The schema the notebook writes into; set per target
+    default: m7_dev
+
+  # Pinned to the training workspace's one all-purpose cluster,
+  # Training_Cluster. The id is workspace-specific — the same trade-off
+  # Module 4 accepted, for the same reason: the credential may not create
+  # clusters, and a permission outranks a preference.
+  cluster_id:
+    description: Id of the existing all-purpose cluster the task runs on
+    default: 0318-031919-b3fa4xtr
+
+targets:
+
+  dev:
+    mode: development
+    default: true
+    variables:
+      schema: m7_dev
+
+  prod:
+    mode: production
+    # Deploys to prod are refused from any other branch, so the only path
+    # into prod is a merge (slide 38).
+    git:
+      branch: main
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      schema: m7_prod
+    permissions:
+      - user_name: ${workspace.current_user.userName}
+        level: CAN_MANAGE
+      - group_name: users
+        level: CAN_VIEW
