@@ -28,11 +28,11 @@ variables:
 
   catalog:
     description: The catalog the notebook writes into
-    default: m7
+    default: ctl_training_dev
 
   schema:
     description: The schema the notebook writes into; set per target
-    default: m7_dev
+    default: m7
 
   # Pinned to the training workspace's one all-purpose cluster,
   # Training_Cluster. The id is workspace-specific — the same trade-off
