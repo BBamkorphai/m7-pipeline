@@ -10,7 +10,7 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "m7")
+dbutils.widgets.text("catalog", "ctl_training_dev")
 dbutils.widgets.text("schema", "m7_dev")
 dbutils.widgets.text("table_suffix", "")
 dbutils.widgets.text("bundle_root", "")

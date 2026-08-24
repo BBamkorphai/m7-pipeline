@@ -9,7 +9,7 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "m7")
+dbutils.widgets.text("catalog", "ctl_training_dev")
 dbutils.widgets.text("schema", "m7_dev")
 dbutils.widgets.text("table_suffix", "")
 dbutils.widgets.text("bundle_root", "")
@@ -93,6 +93,9 @@ result = (scored.join(customer_dim, "customer_key", "inner")
 
 # COMMAND ----------
 
+# Idempotent, and it needs the CREATE SCHEMA privilege on the catalog. Where
+# the credential does not have it, an administrator creates m7_dev and
+# m7_prod once and this line is a no-op.
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA}")
 result.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(RFM_TABLE)
 
