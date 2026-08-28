@@ -1,0 +1,64 @@
+# E7 — the platform's own artefact store. The eda_report task logged the
+# figures, the parameters and the metrics into one MLflow run inside the
+# workspace; this workflow reads that run back and asserts on it.
+#
+# The contrast with E6 is the point: a GitHub artefact is files from a
+# runner, kept for a retention window, attached to a pull request. An MLflow
+# run is a record in the workspace, beside the data, comparable with every
+# earlier run, and readable by anyone with the workspace — including CI.
+name: E7 MLflow
+
+on:
+  workflow_dispatch:
+
+jobs:
+  read_back:
+    runs-on: ubuntu-latest
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@v1.13.0
+
+      - name: Deploy and run the pipeline, ending in eda_report
+        run: |
+          databricks bundle deploy -t dev
+          databricks bundle run rfm -t dev
+
+      - name: Read the run MLflow recorded, and assert on it
+        run: |
+          U=$(databricks current-user me -o json | jq -r .userName)
+          EXP=$(databricks experiments get-by-name "/Users/$U/m7-rfm" -o json \
+                | jq -r .experiment.experiment_id)
+          echo "experiment $EXP"
+
+          databricks experiments search-runs --json "{
+            \"experiment_ids\": [\"$EXP\"],
+            \"max_results\": 1,
+            \"order_by\": [\"attributes.start_time DESC\"]
+          }" -o json > run.json
+
+          # The CLI unwraps a single-field list response, so -o json gives a
+          # bare ARRAY of runs here — not the {"runs": [...]} envelope the REST
+          # API documents. Accept either, rather than depending on which.
+          jq 'if type == "array" then . else .runs end' run.json > runs.json
+
+          if [ "$(jq 'length' runs.json)" -eq 0 ]; then
+            echo "::error::the experiment has no runs yet — run the job once"
+            exit 1
+          fi
+
+          # Flatten [{key,value},...] into {key: value} once, so every
+          # assertion below reads as a plain question about a number.
+          jq '.[0].data.metrics | map({(.key): (.value|tonumber)}) | add' \
+             runs.json > metrics.json
+          jq -r 'to_entries[] | "  \(.key) = \(.value)"' metrics.json
+
+          # The pipeline is only meaningful if it scored somebody, and the
+          # segmentation must not have collapsed onto one segment.
+          jq -e '.rows > 0' metrics.json > /dev/null
+          jq -e '[to_entries[] | select(.key | startswith("share_")) | .value]
+                 | map(select(. > 0)) | length >= 3' metrics.json > /dev/null
+          echo "the run MLflow recorded satisfies both assertions"
